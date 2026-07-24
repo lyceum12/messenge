@@ -1,4 +1,3 @@
-require('dotenv').config();
 const express = require('express');
 const http = require('http');
 const socketIo = require('socket.io');
@@ -16,21 +15,22 @@ const io = socketIo(server, {
   cors: { origin: '*' }
 });
 
-// Подключение к MongoDB
-mongoose.connect(process.env.MONGO_URI)
+// ---------- Подключение к MongoDB ----------
+// Если переменная окружения MONGO_URI не задана, используем локальную БД (для разработки)
+const mongoUri = process.env.MONGO_URI || 'mongodb://localhost:27017/messenger';
+mongoose.connect(mongoUri)
   .then(() => console.log('MongoDB connected'))
-  .catch(err => console.error(err));
+  .catch(err => console.error('MongoDB connection error:', err));
 
 // Middleware
 app.use(cors());
 app.use(express.json());
-app.use(express.static('public'));          // статика для клиента
-app.use('/uploads', express.static('uploads')); // доступ к загруженным файлам
+app.use(express.static('public'));
+app.use('/uploads', express.static('uploads'));
 app.use('/api/upload', uploadRoutes);
 
-// --------------------- REST API ---------------------
-
-// 1. Создание комнаты (главный пользователь)
+// ---------- REST API ----------
+// 1. Создание комнаты
 app.post('/api/rooms', async (req, res) => {
   const { roomName, ownerId } = req.body;
   if (!roomName || !ownerId) {
@@ -48,7 +48,7 @@ app.post('/api/rooms', async (req, res) => {
   res.json({ roomId: room._id, inviteLink });
 });
 
-// 2. Проверка инвайт-токена (для входа)
+// 2. Проверка инвайт-токена
 app.get('/api/verify-invite/:roomId', async (req, res) => {
   const { roomId } = req.params;
   const { token } = req.query;
@@ -59,14 +59,13 @@ app.get('/api/verify-invite/:roomId', async (req, res) => {
   res.json({ valid: true, roomName: room.name });
 });
 
-// 3. Присоединение к комнате (добавление участника)
+// 3. Присоединение к комнате
 app.post('/api/join-room', async (req, res) => {
   const { roomId, token, username } = req.body;
   const room = await Room.findById(roomId);
   if (!room || room.inviteToken !== token) {
     return res.status(403).json({ error: 'Недействительная ссылка' });
   }
-  // Генерируем временный sessionId
   const sessionId = uuidv4();
   if (!room.members.includes(sessionId)) {
     room.members.push(sessionId);
@@ -75,21 +74,18 @@ app.post('/api/join-room', async (req, res) => {
   res.json({ sessionId, roomName: room.name });
 });
 
-// 4. Получение истории сообщений комнаты
+// 4. История сообщений
 app.get('/api/messages/:roomId', async (req, res) => {
   const { roomId } = req.params;
   const messages = await Message.find({ roomId }).sort({ timestamp: 1 }).limit(100);
   res.json(messages);
 });
 
-// --------------------- WebSocket (Socket.IO) ---------------------
-
+// ---------- WebSocket ----------
 io.on('connection', (socket) => {
   console.log('New client connected:', socket.id);
 
-  // Присоединение к комнате чата
   socket.on('join', async ({ roomId, sessionId, username }) => {
-    // Проверяем, что сессия есть в участниках
     const room = await Room.findById(roomId);
     if (!room || !room.members.includes(sessionId)) {
       socket.emit('error', 'Доступ запрещён');
@@ -97,13 +93,13 @@ io.on('connection', (socket) => {
     }
     socket.join(roomId);
     socket.data = { roomId, sessionId, username };
-    // Отправляем приветствие
-    socket.emit('joined', { roomName: room.name, messages: await Message.find({ roomId }).sort({ timestamp: 1 }).limit(100) });
-    // Оповещаем остальных
+    socket.emit('joined', {
+      roomName: room.name,
+      messages: await Message.find({ roomId }).sort({ timestamp: 1 }).limit(100)
+    });
     socket.to(roomId).emit('user-joined', username);
   });
 
-  // Обработка текстового сообщения
   socket.on('text-message', async (data) => {
     const { roomId, text } = data;
     const { username } = socket.data;
@@ -123,7 +119,6 @@ io.on('connection', (socket) => {
     });
   });
 
-  // Обработка файлового сообщения (URL уже загружен через REST)
   socket.on('file-message', async (data) => {
     const { roomId, fileUrl, fileName, fileSize, mimeType } = data;
     const { username } = socket.data;
@@ -145,14 +140,11 @@ io.on('connection', (socket) => {
     });
   });
 
-  // Отключение
   socket.on('disconnect', () => {
     console.log('Client disconnected:', socket.id);
-    // Можно оповестить комнату, но для простоты опустим
   });
 });
 
-// Запуск сервера
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
