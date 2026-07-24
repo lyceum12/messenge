@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Мессенджер</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div id="app">
+    <!-- Экран входа -->
+    <div id="login-screen">
+      <h1>Вход в чат</h1>
+      <div id="invite-info"></div>
+      <input type="text" id="username-input" placeholder="Ваше имя">
+      <button id="join-btn">Войти</button>
+      <div id="error-msg" style="color:red;"></div>
+    </div>
+
+    <!-- Экран чата -->
+    <div id="chat-screen" style="display:none;">
+      <div id="header">
+        <span id="room-name"></span>
+        <button id="logout-btn">Выйти</button>
+      </div>
+      <div id="message-area"></div>
+      <div id="input-area">
+        <input type="text" id="text-input" placeholder="Сообщение...">
+        <button id="emoji-btn">😊</button>
+        <input type="file" id="file-input" accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.txt">
+        <button id="send-btn">Отправить</button>
+      </div>
+    </div>
+  </div>
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
